@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "description": "Backend para Fharoo - Kiosko de Ajedrez en vivo",
   "main": "server.js",
+  "type": "commonjs"
   "scripts": {
     "start": "node server.js"
   },
