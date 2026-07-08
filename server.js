@@ -29,6 +29,7 @@ app.post('/api/scrape', async (req, res) => {
     try {
         console.log(`🔍 Extrayendo datos de: ${url}`);
 
+        // Usar Chromium descargado por Puppeteer automáticamente
         const browser = await puppeteer.launch({
             headless: true,
             args: [
