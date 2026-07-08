@@ -1,14 +1,14 @@
-// server.js - Backend Fharoo
-const express = require('express');
-const puppeteer = require('puppeteer');
-const cors = require('cors');
+// server.js - Backend Fharoo (Versión ES Module)
+import express from 'express';
+import puppeteer from 'puppeteer';
+import cors from 'cors';
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
 app.get('/', (req, res) => {
-    res.json({ 
+    res.json({
         nombre: 'Fharoo Backend',
         version: '1.0.0',
         estado: '✅ Funcionando correctamente'
@@ -42,10 +42,10 @@ app.post('/api/scrape', async (req, res) => {
 
         const page = await browser.newPage();
         await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36');
-        
-        await page.goto(url, { 
-            waitUntil: 'networkidle2', 
-            timeout: 30000 
+
+        await page.goto(url, {
+            waitUntil: 'networkidle2',
+            timeout: 30000
         });
 
         // Esperar a que la tabla de pareos esté cargada
@@ -54,10 +54,9 @@ app.post('/api/scrape', async (req, res) => {
         });
 
         const pairings = await page.evaluate(() => {
-            // Buscar la tabla de pareos de manera más robusta
             const tables = document.querySelectorAll('table');
             let pairingTable = null;
-            
+
             for (const table of tables) {
                 const text = table.textContent || '';
                 if (text.includes('Mesa') && text.includes('Blancas') && text.includes('Negras')) {
@@ -65,7 +64,7 @@ app.post('/api/scrape', async (req, res) => {
                     break;
                 }
             }
-            
+
             if (!pairingTable) return [];
 
             const rows = pairingTable.querySelectorAll('tr');
@@ -80,9 +79,8 @@ app.post('/api/scrape', async (req, res) => {
                 }
                 if (cols.length >= 6) {
                     let resultado = cols[5]?.textContent?.trim() || '';
-                    // Limpiar resultado si está vacío
                     if (resultado === '') resultado = '';
-                    
+
                     data.push({
                         mesa: parseInt(cols[0]?.textContent?.trim() || '0'),
                         blanco: cols[2]?.textContent?.trim()?.replace(/^[A-Z]+\s+/, '') || 'Sin nombre',
@@ -100,7 +98,6 @@ app.post('/api/scrape', async (req, res) => {
 
         await browser.close();
 
-        // Extraer número de ronda de la URL
         const roundMatch = url.match(/rd=(\d+)/);
         const round = roundMatch ? parseInt(roundMatch[1]) : '?';
 
@@ -115,8 +112,8 @@ app.post('/api/scrape', async (req, res) => {
 
     } catch (error) {
         console.error('❌ Error en scraping:', error);
-        res.status(500).json({ 
-            error: 'Error al extraer datos: ' + error.message 
+        res.status(500).json({
+            error: 'Error al extraer datos: ' + error.message
         });
     }
 });
