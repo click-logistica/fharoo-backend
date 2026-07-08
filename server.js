@@ -1,6 +1,6 @@
-// server.js - Backend Fharoo (Versión ES Module)
+// server.js - Backend Fharoo (con puppeteer-core)
 import express from 'express';
-import puppeteer from 'puppeteer';
+import puppeteer from 'puppeteer-core';
 import cors from 'cors';
 
 const app = express();
@@ -29,9 +29,10 @@ app.post('/api/scrape', async (req, res) => {
     try {
         console.log(`🔍 Extrayendo datos de: ${url}`);
 
-        // Usar Chromium descargado por Puppeteer automáticamente
+        // Configurar Puppeteer para usar Chrome de Render
         const browser = await puppeteer.launch({
             headless: true,
+            executablePath: '/usr/bin/google-chrome-stable', // Ruta de Chrome en Render
             args: [
                 '--no-sandbox',
                 '--disable-setuid-sandbox',
