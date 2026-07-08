@@ -1,7 +1,8 @@
-// server.js - Backend Fharoo (con puppeteer-core)
+// server.js - Backend Fharoo (sin Puppeteer, con axios + cheerio)
 import express from 'express';
-import puppeteer from 'puppeteer-core';
 import cors from 'cors';
+import axios from 'axios';
+import * as cheerio from 'cheerio';
 
 const app = express();
 app.use(cors());
@@ -29,77 +30,65 @@ app.post('/api/scrape', async (req, res) => {
     try {
         console.log(`🔍 Extrayendo datos de: ${url}`);
 
-        // Configurar Puppeteer para usar Chrome de Render
-        const browser = await puppeteer.launch({
-            headless: true,
-            executablePath: '/usr/bin/google-chrome-stable', // Ruta de Chrome en Render
-            args: [
-                '--no-sandbox',
-                '--disable-setuid-sandbox',
-                '--disable-dev-shm-usage',
-                '--disable-accelerated-2d-canvas',
-                '--disable-gpu'
-            ]
-        });
-
-        const page = await browser.newPage();
-        await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36');
-
-        await page.goto(url, {
-            waitUntil: 'networkidle2',
+        // Hacer la petición HTTP
+        const response = await axios.get(url, {
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+            },
             timeout: 30000
         });
 
-        // Esperar a que la tabla de pareos esté cargada
-        await page.waitForSelector('table[class="CRs1"]', { timeout: 10000 }).catch(() => {
-            console.log('⚠️ No se encontró la tabla principal, intentando con selectores alternativos...');
-        });
+        const html = response.data;
+        const $ = cheerio.load(html);
 
-        const pairings = await page.evaluate(() => {
-            const tables = document.querySelectorAll('table');
-            let pairingTable = null;
+        // Buscar la tabla de pareos
+        const pairings = [];
+        let foundTable = false;
 
-            for (const table of tables) {
-                const text = table.textContent || '';
-                if (text.includes('Mesa') && text.includes('Blancas') && text.includes('Negras')) {
-                    pairingTable = table;
-                    break;
-                }
+        // Buscar todas las tablas que contengan los encabezados de pareos
+        $('table').each((index, table) => {
+            const tableText = $(table).text();
+            if (tableText.includes('Mesa') && tableText.includes('Blancas') && tableText.includes('Negras')) {
+                foundTable = true;
+                // Procesar las filas de la tabla
+                $(table).find('tr').each((rowIndex, row) => {
+                    const cols = $(row).find('td');
+                    if (cols.length >= 6) {
+                        // Saltar la fila de encabezados
+                        const firstColText = $(cols[0]).text().trim();
+                        if (firstColText === '' || firstColText === 'Mesa') return;
+
+                        const mesa = parseInt(firstColText) || 0;
+                        const blanco = $(cols[2]).text().trim().replace(/^[A-Z]+\s+/, '') || 'Sin nombre';
+                        const ratingBlanco = parseInt($(cols[1]).text().trim()) || 0;
+                        const negro = $(cols[4]).text().trim().replace(/^[A-Z]+\s+/, '') || 'Sin nombre';
+                        const ratingNegro = parseInt($(cols[3]).text().trim()) || 0;
+                        let resultado = $(cols[5]).text().trim() || '';
+
+                        if (mesa > 0) {
+                            pairings.push({
+                                mesa: mesa,
+                                blanco: blanco,
+                                ratingBlanco: ratingBlanco,
+                                negro: negro,
+                                ratingNegro: ratingNegro,
+                                resultado: resultado,
+                                nota: ''
+                            });
+                        }
+                    }
+                });
             }
-
-            if (!pairingTable) return [];
-
-            const rows = pairingTable.querySelectorAll('tr');
-            const data = [];
-            let isHeader = true;
-
-            rows.forEach(row => {
-                const cols = row.querySelectorAll('td');
-                if (isHeader) {
-                    isHeader = false;
-                    return;
-                }
-                if (cols.length >= 6) {
-                    let resultado = cols[5]?.textContent?.trim() || '';
-                    if (resultado === '') resultado = '';
-
-                    data.push({
-                        mesa: parseInt(cols[0]?.textContent?.trim() || '0'),
-                        blanco: cols[2]?.textContent?.trim()?.replace(/^[A-Z]+\s+/, '') || 'Sin nombre',
-                        ratingBlanco: parseInt(cols[1]?.textContent?.trim() || '0'),
-                        negro: cols[4]?.textContent?.trim()?.replace(/^[A-Z]+\s+/, '') || 'Sin nombre',
-                        ratingNegro: parseInt(cols[3]?.textContent?.trim() || '0'),
-                        resultado: resultado,
-                        nota: ''
-                    });
-                }
-            });
-
-            return data;
         });
 
-        await browser.close();
+        if (!foundTable || pairings.length === 0) {
+            console.log('⚠️ No se encontraron pareos en la página.');
+            return res.status(404).json({
+                error: 'No se encontraron pareos en la página. Verifica que la URL sea correcta y que la ronda esté disponible.'
+            });
+        }
 
+        // Extraer el número de ronda de la URL
         const roundMatch = url.match(/rd=(\d+)/);
         const round = roundMatch ? parseInt(roundMatch[1]) : '?';
 
@@ -115,7 +104,7 @@ app.post('/api/scrape', async (req, res) => {
     } catch (error) {
         console.error('❌ Error en scraping:', error);
         res.status(500).json({
-            error: 'Error al extraer datos: ' + error.message
+            error: 'Error al extraer datos: ' + (error.message || 'Error desconocido')
         });
     }
 });
